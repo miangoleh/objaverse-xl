@@ -93,10 +93,10 @@ def _sample_spherical(
 
 
 def randomize_camera(
-    radius_min: float = 1.5,
-    radius_max: float = 2.2,
-    maxz: float = 2.2,
-    minz: float = -2.2,
+    radius_min: float = 1,
+    radius_max: float = 3,
+    maxz: float =  3,
+    minz: float =  1,
     only_northern_hemisphere: bool = False,
 ) -> bpy.types.Object:
     """Randomizes the camera location and rotation inside of a spherical shell.
@@ -116,9 +116,13 @@ def randomize_camera(
         bpy.types.Object: The camera object.
     """
 
-    x, y, z = _sample_spherical(
-        radius_min=radius_min, radius_max=radius_max, maxz=maxz, minz=minz
-    )
+    # x, y, z = _sample_spherical(
+    #     radius_min=radius_min, radius_max=radius_max, maxz=maxz, minz=minz
+    # )
+    x=0
+    y=-3
+    z=0
+
     camera = bpy.data.objects["Camera"]
 
     # only positive z
@@ -765,13 +769,15 @@ def render_object(
     # Set up cameras
     cam = scene.objects["Camera"]
     cam.data.lens = 35
-    cam.data.sensor_width = 32
+    cam.data.sensor_width = 36
+    cam.data.sensor_height = 2.5
 
     # Set up camera constraints
     cam_constraint = cam.constraints.new(type="TRACK_TO")
     cam_constraint.track_axis = "TRACK_NEGATIVE_Z"
     cam_constraint.up_axis = "UP_Y"
     empty = bpy.data.objects.new("Empty", None)
+    empty.location = (0, 0, 0)
     scene.collection.objects.link(empty)
     cam_constraint.target = empty
 
@@ -810,12 +816,44 @@ def render_object(
     # randomize the lighting
     randomize_lighting()
 
+    # Enable the depth pass for all view layers
+    for view_layer in bpy.context.scene.view_layers:
+        view_layer.use_pass_z = True
+
+
+    # Enable the depth pass for all view layers
+    for view_layer in bpy.context.scene.view_layers:
+        view_layer.use_pass_z = True
+
+    # Ensure the use of nodes and clear any existing nodes
+    bpy.context.scene.use_nodes = True
+    tree = bpy.context.scene.node_tree
+    tree.nodes.clear()
+
+    # Create Render Layers node
+    render_layers_node = tree.nodes.new('CompositorNodeRLayers')
+
+    # Create Composite node to output final render
+    composite_node = tree.nodes.new(type='CompositorNodeComposite')
+    tree.links.new(render_layers_node.outputs['Image'], composite_node.inputs['Image'])
+
+    # Create File Output node for depth
+    depth_file_output_node = tree.nodes.new(type='CompositorNodeOutputFile')
+    depth_file_output_node.base_path = output_dir  # Set your directory here
+    depth_file_output_node.format.file_format = 'OPEN_EXR'
+    tree.links.new(render_layers_node.outputs['Depth'], depth_file_output_node.inputs[0])
+
+    # Set up the rest of your render settings and loop over your rendering process
+    # Inside your loop, set the file name for the depth output before rendering each frame
+
     # render the images
     for i in range(num_renders):
         # set camera
         camera = randomize_camera(
-            only_northern_hemisphere=only_northern_hemisphere,
+            only_northern_hemisphere=True,
         )
+
+        depth_file_output_node.file_slots[0].path = f'{i:03d}.exr'
 
         # render the image
         render_path = os.path.join(output_dir, f"{i:03d}.png")
@@ -871,8 +909,8 @@ if __name__ == "__main__":
     render.engine = args.engine
     render.image_settings.file_format = "PNG"
     render.image_settings.color_mode = "RGBA"
-    render.resolution_x = 512
-    render.resolution_y = 512
+    render.resolution_x = 1280
+    render.resolution_y = 720
     render.resolution_percentage = 100
 
     # Set cycles settings

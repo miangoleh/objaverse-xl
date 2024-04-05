@@ -1,0 +1,17 @@
+[
+  {
+    "sha256": "a6c9548d7a0c9deda10775bc875cdb7791438df2c9771cdcb737c7326a3567b7",
+    "fileIdentifier": "https://github.com/weiqingv/ARedu/blob/48952ede30e8750a5a44b42dd52f227b181655f4/models/father/F_Hate.gltf",
+    "source": "github"
+  },
+  {
+    "sha256": "4ddcc86eea0ef48361809bb3b9304c27a011126885502ff7c6c83da5e16fd090",
+    "fileIdentifier": "https://github.com/paulc100/Hidden-Treasure-World/blob/9c35dadf097eef68c91a4e20829f1aafd8f40306/Assets/Models/PalmTree2.fbx",
+    "source": "github"
+  },
+  {
+    "sha256": "7a036237fe025da01db63197fc1d9a65334579e2251963a3e7f83742861c2850",
+    "fileIdentifier": "https://github.com/manoelpla/pepper_sim_ws/blob/248cb1a2919e17a5017f6cfea9022d8d85b31bde/src/pepper_virtual/pepper_gazebo_plugin/models/alexa/meshes/alexa.dae",
+    "source": "github"
+  }
+]
