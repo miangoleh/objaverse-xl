@@ -166,3 +166,6 @@ cython_debug/
 # Mahdi Results
 scripts/rendering/results
 scripts/rendering/objaverse
+scripts/rendering/tmp
+scripts/rendering/objaverse-xl
+scripts/rendering/io_scene_usdz

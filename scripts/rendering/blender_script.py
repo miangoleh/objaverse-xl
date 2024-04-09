@@ -91,13 +91,46 @@ def _sample_spherical(
             correct = True
     return vec
 
+import numpy as np
+
+def _sample_cylindrical(
+    min_radius: float = 1.5,
+    max_radius: float = 2.0,
+    min_height: float = -0.5,
+    max_height: float = 0.5,
+) -> np.ndarray:
+    """Sample a random point in a cylindrical shell around the z-axis.
+
+    Args:
+        radius (float): Radius of the cylindrical shell.
+        height (float): Height of the cylindrical shell.
+
+    Returns:
+        np.ndarray: A random (x, y, z) point in the cylindrical shell.
+    """
+    phi = np.random.uniform(0, 2*np.pi)  # Random angle in radians
+    r = np.random.uniform(min_radius, max_radius)  # random radius square
+
+    x = r * np.cos(phi)
+    y = r * np.sin(phi)
+    z = np.random.uniform(min_height, max_height)
+
+    return np.array([x, y, z])
+
+
+def _sample_studio() -> np.ndarray:
+    """Sample a random point in our studio setup.
+
+    Returns:
+        np.ndarray: A random (x, y, z) point in the studio setup.
+    """
+    return _sample_cylindrical(min_radius=1.5, max_radius=3.5, min_height=-1, max_height=1)
 
 def randomize_camera(
     radius_min: float = 1,
     radius_max: float = 3,
     maxz: float =  3,
     minz: float =  1,
-    only_northern_hemisphere: bool = False,
 ) -> bpy.types.Object:
     """Randomizes the camera location and rotation inside of a spherical shell.
 
@@ -116,18 +149,9 @@ def randomize_camera(
         bpy.types.Object: The camera object.
     """
 
-    # x, y, z = _sample_spherical(
-    #     radius_min=radius_min, radius_max=radius_max, maxz=maxz, minz=minz
-    # )
-    x=0
-    y=-3
-    z=0
+    x, y, z = _sample_studio()
 
     camera = bpy.data.objects["Camera"]
-
-    # only positive z
-    if only_northern_hemisphere:
-        z = abs(z)
 
     camera.location = Vector(np.array([x, y, z]))
 
@@ -202,6 +226,10 @@ def _create_light(
     light_data.use_shadow = use_shadow
     light_data.specular_factor = specular_factor
     light_data.energy = energy
+    if light_type == "AREA":
+        light_data.shape = "DISK"
+        light_data.size = 0.5
+
     return light_object
 
 
@@ -220,38 +248,38 @@ def randomize_lighting() -> Dict[str, bpy.types.Object]:
 
     # Create key light
     key_light = _create_light(
-        name="Key_Light",
-        light_type="SUN",
-        location=(0, 0, 0),
-        rotation=(0.785398, 0, -0.785398),
-        energy=random.choice([3, 4, 5]),
+        name="LEFT_BACKWARD",
+        light_type="AREA",
+        location=(-1, 0.5, 1),
+        rotation=(math.radians(-22.5), math.radians(-45), 0),
+        energy=random.randint(10, 20),
     )
 
     # Create fill light
     fill_light = _create_light(
-        name="Fill_Light",
-        light_type="SUN",
-        location=(0, 0, 0),
-        rotation=(0.785398, 0, 2.35619),
-        energy=random.choice([2, 3, 4]),
+        name="LEFT_FORWARD",
+        light_type="AREA",
+        location=(-1, -0.5, 1),
+        rotation=(math.radians(22.5), math.radians(-45), 0),
+        energy=random.randint(10, 20),
     )
 
     # Create rim light
     rim_light = _create_light(
-        name="Rim_Light",
-        light_type="SUN",
-        location=(0, 0, 0),
-        rotation=(-0.785398, 0, -3.92699),
-        energy=random.choice([3, 4, 5]),
+        name="RIGHT_BACKWARD",
+        light_type="AREA",
+        location=(1, 0.5, 1),
+        rotation=(math.radians(-22.5), math.radians(45), 0),
+        energy=random.randint(10, 20),
     )
 
     # Create bottom light
     bottom_light = _create_light(
-        name="Bottom_Light",
-        light_type="SUN",
-        location=(0, 0, 0),
-        rotation=(3.14159, 0, 0),
-        energy=random.choice([1, 2, 3]),
+        name="RIGHT_FORWARD",
+        light_type="AREA",
+        location=(1, -0.5, 1),
+        rotation=(math.radians(22.5), math.radians(45), 0),
+        energy=random.randint(10, 20),
     )
 
     return dict(
@@ -765,21 +793,23 @@ def render_object(
     else:
         reset_scene()
         load_object(object_file)
+        reset_cameras()
+        delete_invisible_objects()
 
     # Set up cameras
     cam = scene.objects["Camera"]
-    cam.data.lens = 35
+    cam.data.lens = 45
     cam.data.sensor_width = 36
-    cam.data.sensor_height = 2.5
 
+    # deactivate - empy opject moves with some scaling and results in wrong camera direction.
     # Set up camera constraints
-    cam_constraint = cam.constraints.new(type="TRACK_TO")
-    cam_constraint.track_axis = "TRACK_NEGATIVE_Z"
-    cam_constraint.up_axis = "UP_Y"
-    empty = bpy.data.objects.new("Empty", None)
-    empty.location = (0, 0, 0)
-    scene.collection.objects.link(empty)
-    cam_constraint.target = empty
+    # cam_constraint = cam.constraints.new(type="TRACK_TO")
+    # cam_constraint.track_axis = "TRACK_NEGATIVE_Z"
+    # cam_constraint.up_axis = "UP_Y"
+    # empty = bpy.data.objects.new("Empty", None)
+    # empty.location = (0, 0, 0)
+    # scene.collection.objects.link(empty)
+    # cam_constraint.target = empty
 
     # Extract the metadata. This must be done before normalizing the scene to get
     # accurate bounding box information.
@@ -819,29 +849,65 @@ def render_object(
     # Enable the depth pass for all view layers
     for view_layer in bpy.context.scene.view_layers:
         view_layer.use_pass_z = True
-
-
-    # Enable the depth pass for all view layers
-    for view_layer in bpy.context.scene.view_layers:
-        view_layer.use_pass_z = True
+        view_layer.use_pass_normal = True
+        view_layer.use_pass_diffuse_color = True
+        view_layer.use_pass_object_index = True
 
     # Ensure the use of nodes and clear any existing nodes
     bpy.context.scene.use_nodes = True
     tree = bpy.context.scene.node_tree
     tree.nodes.clear()
 
-    # Create Render Layers node
-    render_layers_node = tree.nodes.new('CompositorNodeRLayers')
+    # Create input render layer node
+    nodes = bpy.context.scene.node_tree.nodes
+    links = bpy.context.scene.node_tree.links
 
-    # Create Composite node to output final render
-    composite_node = tree.nodes.new(type='CompositorNodeComposite')
-    tree.links.new(render_layers_node.outputs['Image'], composite_node.inputs['Image'])
+    render_layers = nodes.new('CompositorNodeRLayers')
 
-    # Create File Output node for depth
-    depth_file_output_node = tree.nodes.new(type='CompositorNodeOutputFile')
-    depth_file_output_node.base_path = output_dir  # Set your directory here
-    depth_file_output_node.format.file_format = 'OPEN_EXR'
-    tree.links.new(render_layers_node.outputs['Depth'], depth_file_output_node.inputs[0])
+    # Create depth output nodes
+    depth_file_output = nodes.new(type="CompositorNodeOutputFile")
+    depth_file_output.label = 'Depth Output'
+    depth_file_output.base_path = output_dir
+    depth_file_output.file_slots[0].use_node_format = True
+    depth_file_output.format.file_format = "OPEN_EXR"
+    links.new(render_layers.outputs['Depth'], depth_file_output.inputs[0])
+
+    # Create normal output nodes
+    scale_node = nodes.new(type="CompositorNodeMixRGB")
+    scale_node.blend_type = 'MULTIPLY'
+    # scale_node.use_alpha = True
+    scale_node.inputs[2].default_value = (0.5, 0.5, 0.5, 1)
+    links.new(render_layers.outputs['Normal'], scale_node.inputs[1])
+
+    bias_node = nodes.new(type="CompositorNodeMixRGB")
+    bias_node.blend_type = 'ADD'
+    # bias_node.use_alpha = True
+    bias_node.inputs[2].default_value = (0.5, 0.5, 0.5, 0)
+    links.new(scale_node.outputs[0], bias_node.inputs[1])
+
+    normal_file_output = nodes.new(type="CompositorNodeOutputFile")
+    normal_file_output.label = 'Normal Output'
+    normal_file_output.base_path = output_dir
+    normal_file_output.file_slots[0].use_node_format = True
+    # normal_file_output.format.file_format = "OPEN_EXR"
+    normal_file_output.format.color_mode = 'RGBA'
+    normal_file_output.format.color_depth = '8'
+    links.new(bias_node.outputs[0], normal_file_output.inputs[0])
+
+    # Create albedo output nodes
+    alpha_albedo = nodes.new(type="CompositorNodeSetAlpha")
+    links.new(render_layers.outputs['DiffCol'], alpha_albedo.inputs['Image'])
+    links.new(render_layers.outputs['Alpha'], alpha_albedo.inputs['Alpha'])
+
+    albedo_file_output = nodes.new(type="CompositorNodeOutputFile")
+    albedo_file_output.label = 'Albedo Output'
+    albedo_file_output.base_path = output_dir
+    albedo_file_output.file_slots[0].use_node_format = True
+    # albedo_file_output.format.file_format = "OPEN_EXR"
+    albedo_file_output.format.color_mode = 'RGBA'
+    albedo_file_output.format.color_depth = '8'
+    links.new(alpha_albedo.outputs['Image'], albedo_file_output.inputs[0])
+
 
     # Set up the rest of your render settings and loop over your rendering process
     # Inside your loop, set the file name for the depth output before rendering each frame
@@ -849,15 +915,17 @@ def render_object(
     # render the images
     for i in range(num_renders):
         # set camera
-        camera = randomize_camera(
-            only_northern_hemisphere=True,
-        )
-
-        depth_file_output_node.file_slots[0].path = f'{i:03d}.exr'
+        camera = randomize_camera()
 
         # render the image
-        render_path = os.path.join(output_dir, f"{i:03d}.png")
+        render_path = os.path.join(output_dir, f"{i:03d}")
         scene.render.filepath = render_path
+
+
+        depth_file_output.file_slots[0].path =  f"{i:03d}_depth"
+        normal_file_output.file_slots[0].path = f"{i:03d}_normal"
+        albedo_file_output.file_slots[0].path = f"{i:03d}_albedo"
+
         bpy.ops.render.render(write_still=True)
 
         # save camera RT matrix
@@ -883,7 +951,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--engine",
         type=str,
-        default="BLENDER_EEVEE",
+        default="CYCLES",
         choices=["CYCLES", "BLENDER_EEVEE"],
     )
     parser.add_argument(
@@ -909,8 +977,8 @@ if __name__ == "__main__":
     render.engine = args.engine
     render.image_settings.file_format = "PNG"
     render.image_settings.color_mode = "RGBA"
-    render.resolution_x = 1280
-    render.resolution_y = 720
+    render.resolution_x = 1024
+    render.resolution_y = 1024
     render.resolution_percentage = 100
 
     # Set cycles settings
@@ -934,4 +1002,19 @@ if __name__ == "__main__":
         num_renders=args.num_renders,
         only_northern_hemisphere=args.only_northern_hemisphere,
         output_dir=args.output_dir,
+    )
+
+    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(args.output_dir, "debug.blend"))
+
+    output_obj_file = os.path.join(args.output_dir, "output.obj")
+
+    # Select all objects in the scene
+    bpy.ops.object.select_all(action='SELECT')
+
+    # Export selected objects as OBJ
+    bpy.ops.export_scene.obj(
+        filepath=output_obj_file,
+        use_selection=True,  # Export only selected objects
+        use_materials=True,  # Export materials
+        use_triangles=True    # Export as triangles
     )

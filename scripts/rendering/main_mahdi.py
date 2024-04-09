@@ -123,17 +123,17 @@ def handle_found_object(
         args += f" --output_dir {target_directory}"
 
         # check for Linux / Ubuntu or MacOS
-        if platform.system() == "Linux" and using_gpu:
-            args += " --engine BLENDER_EEVEE"
-        elif platform.system() == "Darwin" or (
-            platform.system() == "Linux" and not using_gpu
-        ):
-            # As far as I know, MacOS does not support BLENER_EEVEE, which uses GPU
-            # rendering. Generally, I'd only recommend using MacOS for debugging and
-            # small rendering jobs, since CYCLES is much slower than BLENDER_EEVEE.
-            args += " --engine CYCLES"
-        else:
-            raise NotImplementedError(f"Platform {platform.system()} is not supported.")
+        # if platform.system() == "Linux" and using_gpu:
+        #     args += " --engine BLENDER_EEVEE"
+        # elif platform.system() == "Darwin" or (
+        #     platform.system() == "Linux" and not using_gpu
+        # ):
+        #     # As far as I know, MacOS does not support BLENER_EEVEE, which uses GPU
+        #     # rendering. Generally, I'd only recommend using MacOS for debugging and
+        #     # small rendering jobs, since CYCLES is much slower than BLENDER_EEVEE.
+        args += " --engine CYCLES"
+        # else:
+            # raise NotImplementedError(f"Platform {platform.system()} is not supported.")
 
         # check if we should only render the northern hemisphere
         if only_northern_hemisphere:
@@ -160,8 +160,7 @@ def handle_found_object(
         metadata_files = glob.glob(os.path.join(target_directory, "*.json"))
         npy_files = glob.glob(os.path.join(target_directory, "*.npy"))
         if (
-            (len(png_files) != num_renders)
-            or (len(npy_files) != num_renders)
+            (len(npy_files) != num_renders)
             or (len(metadata_files) != 1)
         ):
             logger.error(
@@ -403,6 +402,14 @@ def render_objects(
 
     # get the objects to render
     objects = get_example_objects()
+
+    # get random objects from the alignment annotations
+    alignment_annotations = oxl.get_alignment_annotations(download_dir="./results/temp/objaverse") # default download directory
+    objects = alignment_annotations.groupby("source").apply(lambda x: x.sample(25)).reset_index(drop=True)
+    # select objects from glb source
+    # objects = objects[objects["source"] == "glb"].apply(lambda x: x.sample(5)).reset_index(drop=True)
+
+
     objects.iloc[0]["fileIdentifier"]
     objects = objects.copy()
     logger.info(f"Provided {len(objects)} objects to render.")
@@ -426,13 +433,6 @@ def render_objects(
 
     # shuffle the objects
     objects = objects.sample(frac=1).reset_index(drop=True)
-    
-
-    # alignment_annotations = oxl.get_alignment_annotations(download_dir="./objaverse") # default download directory
-    # # sample a single object from each source
-    # # sample 10 objects from each source
-    # sampled_df = alignment_annotations.groupby("source").apply(lambda x: x.sample(5)).reset_index(drop=True)
-    # objects = sampled_df
     
     oxl.download_objects(
         objects=objects,
