@@ -158,9 +158,9 @@ def handle_found_object(
         # check that the renders were saved successfully
         png_files = glob.glob(os.path.join(target_directory, "*.png"))
         metadata_files = glob.glob(os.path.join(target_directory, "*.json"))
-        npy_files = glob.glob(os.path.join(target_directory, "*.npy"))
+        npz_files = glob.glob(os.path.join(target_directory, "*.npz"))
         if (
-            (len(npy_files) != num_renders)
+            (len(npz_files) != num_renders)
             or (len(metadata_files) != 1)
         ):
             logger.error(
@@ -401,13 +401,13 @@ def render_objects(
         processes = multiprocessing.cpu_count()
 
     # get the objects to render
-    # objects = get_example_objects()
+    objects = get_example_objects()
 
     # get random objects from the alignment annotations
-    alignment_annotations = oxl.get_alignment_annotations(download_dir="./results/temp/objaverse") # default download directory
+    # alignment_annotations = oxl.get_alignment_annotations(download_dir="./results/temp/objaverse") # default download directory
     # objects = alignment_annotations.groupby("source").apply(lambda x: x.sample(25)).reset_index(drop=True)
     # select first 10  objects from sketchfab source 
-    objects = alignment_annotations[alignment_annotations["source"] == "sketchfab"].head(12)
+    # objects = alignment_annotations[alignment_annotations["source"] == "sketchfab"].head(12)
 
 
     objects.iloc[0]["fileIdentifier"]
