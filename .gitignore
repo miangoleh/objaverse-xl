@@ -169,3 +169,4 @@ scripts/rendering/objaverse
 scripts/rendering/tmp
 scripts/rendering/objaverse-xl
 scripts/rendering/io_scene_usdz
+scripts/rendering/*.ply
