@@ -398,16 +398,16 @@ def render_objects(
     logger.info(f"Using {parsed_gpu_devices} GPU devices for rendering.")
 
     if processes is None:
-        processes = multiprocessing.cpu_count() * 3
+        processes = multiprocessing.cpu_count()
 
     # get the objects to render
-    objects = get_example_objects()
+    # objects = get_example_objects()
 
     # get random objects from the alignment annotations
     alignment_annotations = oxl.get_alignment_annotations(download_dir="./results/temp/objaverse") # default download directory
-    objects = alignment_annotations.groupby("source").apply(lambda x: x.sample(25)).reset_index(drop=True)
-    # select objects from glb source
-    # objects = objects[objects["source"] == "glb"].apply(lambda x: x.sample(5)).reset_index(drop=True)
+    # objects = alignment_annotations.groupby("source").apply(lambda x: x.sample(25)).reset_index(drop=True)
+    # select first 10  objects from sketchfab source 
+    objects = alignment_annotations[alignment_annotations["source"] == "sketchfab"].head(12)
 
 
     objects.iloc[0]["fileIdentifier"]

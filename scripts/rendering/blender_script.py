@@ -791,9 +791,9 @@ def render_object(
         reset_cameras()
         delete_invisible_objects()
     else:
+        reset_cameras()
         reset_scene()
         load_object(object_file)
-        reset_cameras()
         delete_invisible_objects()
 
     # Set up cameras
