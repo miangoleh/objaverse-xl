@@ -140,20 +140,33 @@ def handle_found_object(
             args += " --only_northern_hemisphere"
 
         # get the command to run
-        command = f"blender --background --python blender_script.py -- {args}"
+        command = f"blender-3.2.2-linux-x64/blender --background --python blender_script.py -- {args}"
 
+        n_cores = 8
+        total_cores = os.cpu_count()
+        # Randomly select n_cores from the available cores
+        cores = random.sample(range(total_cores), n_cores)
+
+        # Convert the list of cores into a comma-separated string
+        cores_string = ','.join(map(str, cores))
         if using_gpu:
-            command = f"export DISPLAY=:0.{gpu_i} && {command}"
+            command = f"export CUDA_VISIBLE_DEVICES={gpu_i} && taskset -c {cores_string} {command}"
 
         # render the object (put in dev null)
         print(command)
-        subprocess.run(
+        start_time = time.time()
+        result = subprocess.run(
             ["bash", "-c", command],
             timeout=render_timeout,
             check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True  # This ensures outputs are treated as text (strings)
         )
+        end_time = time.time()
+        print(f"Rendered {file_identifier} in {end_time - start_time:.2f} seconds.")
+        # print("STDOUT:", result.stdout)
+        # print("STDERR:", result.stderr)
 
         # check that the renders were saved successfully
         png_files = glob.glob(os.path.join(target_directory, "*.png"))
@@ -342,11 +355,11 @@ def get_example_objects() -> pd.DataFrame:
 def render_objects(
     render_dir: str = "./results",
     download_dir: Optional[str] = "./results/temp",
-    num_renders: int = 12,
+    num_renders: int = 8,
     processes: Optional[int] = None,
     save_repo_format: Optional[Literal["zip", "tar", "tar.gz", "files"]] = "files",
     only_northern_hemisphere: bool = False,
-    render_timeout: int = 300,
+    render_timeout: int = 1000,
     gpu_devices: Optional[Union[int, List[int]]] = None,
 ) -> None:
     """Renders objects in the Objaverse-XL dataset with Blender
@@ -395,20 +408,22 @@ def render_objects(
     parsed_gpu_devices: Union[int, List[int]] = 0
     if gpu_devices is None:
         parsed_gpu_devices = len(GPUtil.getGPUs())
+    else: 
+        parsed_gpu_devices = list(gpu_devices)
     logger.info(f"Using {parsed_gpu_devices} GPU devices for rendering.")
 
     if processes is None:
         processes = multiprocessing.cpu_count()
+    logger.info(f"Using {processes} processes for downloading objects.")
 
     # get the objects to render
-    objects = get_example_objects()
+    # objects = get_example_objects()
 
     # get random objects from the alignment annotations
-    # alignment_annotations = oxl.get_alignment_annotations(download_dir="./results/temp/objaverse") # default download directory
+    alignment_annotations = oxl.get_alignment_annotations(download_dir="./results/temp/objaverse") # default download directory
     # objects = alignment_annotations.groupby("source").apply(lambda x: x.sample(25)).reset_index(drop=True)
     # select first 10  objects from sketchfab source 
-    # objects = alignment_annotations[alignment_annotations["source"] == "sketchfab"].head(12)
-
+    objects = alignment_annotations[alignment_annotations["source"] == "sketchfab"].iloc[60000:61000]
 
     objects.iloc[0]["fileIdentifier"]
     objects = objects.copy()

@@ -124,7 +124,7 @@ def _sample_studio() -> np.ndarray:
     Returns:
         np.ndarray: A random (x, y, z) point in the studio setup.
     """
-    return _sample_cylindrical(min_radius=1.5, max_radius=3.5, min_height=-1, max_height=1)
+    return _sample_cylindrical(min_radius=1.7, max_radius=2.2, min_height=-0.1, max_height=0.5)
 
 def randomize_camera(
     radius_min: float = 1,
@@ -153,11 +153,25 @@ def randomize_camera(
 
     camera = bpy.data.objects["Camera"]
 
-    camera.location = Vector(np.array([x, y, z]))
 
-    direction = -camera.location
-    rot_quat = direction.to_track_quat("-Z", "Y")
-    camera.rotation_euler = rot_quat.to_euler()
+    z_target = np.random.uniform(0, 0.2)           # Height of the target point
+    
+    camera.location = Vector(np.array([x, y, z]))
+    # target = Vector([0, 0, z_target])
+
+    # direction = target-camera.location
+    # rot_quat = direction.to_track_quat("-Z", "Y")
+    # camera.rotation_euler = rot_quat.to_euler()
+
+
+    # Set up camera constraints
+    cam_constraint = camera.constraints.new(type="TRACK_TO")
+    cam_constraint.track_axis = "TRACK_NEGATIVE_Z"
+    cam_constraint.up_axis = "UP_Y"
+    empty = bpy.data.objects.new("Empty", None)
+    empty.location = (0, 0, z_target)
+    scene.collection.objects.link(empty)
+    cam_constraint.target = empty
 
     return camera
 
@@ -334,7 +348,7 @@ def load_object(object_path: str) -> None:
         # install usdz io package
         dirname = os.path.dirname(os.path.realpath(__file__))
         usdz_package = os.path.join(dirname, "io_scene_usdz.zip")
-        bpy.ops.preferences.addon_install(filepath=usdz_package)
+        bpy.ops.preferences.addon_install(overwrite=True,filepath=usdz_package)
         # enable it
         addon_name = "io_scene_usdz"
         bpy.ops.preferences.addon_enable(module=addon_name)
@@ -543,7 +557,7 @@ def delete_invisible_objects() -> None:
         bpy.data.collections.remove(col)
 
 
-def normalize_scene() -> None:
+def normalize_scene(max_object_width, max_object_height) -> None:
     """Normalizes the scene by scaling and translating it to fit in a unit cube centered
     at the origin.
 
@@ -566,7 +580,40 @@ def normalize_scene() -> None:
                 obj.parent = parent_empty
 
     bbox_min, bbox_max = scene_bbox()
-    scale = 1 / max(bbox_max - bbox_min)
+    shape = bbox_max - bbox_min
+    print("Shape", shape)
+
+    x_scale = shape[0]
+    y_scale = shape[1]
+    z_scale = shape[2]
+
+    # check if object is too flat!
+    t_scale = 0.2
+    valid_flag = True
+    if x_scale / z_scale < t_scale or x_scale / z_scale > 1/t_scale:
+        valid_flag = False
+    
+    if y_scale / z_scale < t_scale or y_scale / z_scale > 1/t_scale:
+        valid_flag = False
+    
+    if valid_flag == False:
+        # do not render - exit
+        raise ValueError('Object is too flat')
+    
+
+    if np.argmax(shape) == 2: # object is larger in z direction (height)
+        scale = max_object_height / max(shape)
+        print('Scaling object by height', max_object_height)
+    else: # object is larger in x or y direction.
+        scale = max_object_width / max(shape)
+        x_z = shape[0] / shape[2]
+        y_z = shape[1] / shape[2]
+        ar_scale = 1
+        if x_z > 19/36 or y_z > 19/36:
+            ar_sclae = max(x_z, y_z)
+        scale = scale * ar_scale
+        print('Scaling object by width', max_object_width, "ar_scale", ar_scale)
+        
     for obj in get_scene_root_objects():
         obj.scale = obj.scale * scale
 
@@ -874,8 +921,15 @@ def render_object(
 
     # Set up cameras
     cam = scene.objects["Camera"]
-    cam.data.lens = 45
     cam.data.sensor_width = 36
+
+    # Focal Length
+    
+    possible_lens_values = [30, 35, 40 ,50, 55, 60, 65, 80]
+    cam.data.lens = possible_lens_values[0]
+    # weights = [3, 3, 5, 5, 5, 10, 10, 1]
+    # weights = weights / np.sum(weights) # normalize to sum to 1 
+    # cam.data.lens = np.random.choice(possible_lens_values, p=weights)
 
     # deactivate - empy opject moves with some scaling and results in wrong camera direction.
     # Set up camera constraints
@@ -917,7 +971,13 @@ def render_object(
         json.dump(metadata, f, sort_keys=True, indent=2)
 
     # normalize the scene
-    normalize_scene()
+    # 1.7 is the average distance from camera to object - 19 is effective sensor height and 36 sensor width.
+    fov = 2 * np.arctan(36/(cam.data.lens*2)) 
+    max_object_width = np.tan(fov/2) * 1.7 * 2 
+    max_object_height = max_object_width * 19 / 36
+
+    # use 90 percent to ensure object fits in the scene
+    normalize_scene(max_object_width * 0.8, max_object_height*0.8)
 
     # randomize the lighting
     randomize_lighting()
@@ -970,19 +1030,19 @@ def render_object(
     normal_file_output.format.color_depth = '8'
     links.new(bias_node.outputs[0], normal_file_output.inputs[0])
 
-    # Create albedo output nodes
-    alpha_albedo = nodes.new(type="CompositorNodeSetAlpha")
-    links.new(render_layers.outputs['DiffCol'], alpha_albedo.inputs['Image'])
-    links.new(render_layers.outputs['Alpha'], alpha_albedo.inputs['Alpha'])
+    # # Create albedo output nodes
+    # alpha_albedo = nodes.new(type="CompositorNodeSetAlpha")
+    # links.new(render_layers.outputs['DiffCol'], alpha_albedo.inputs['Image'])
+    # links.new(render_layers.outputs['Alpha'], alpha_albedo.inputs['Alpha'])
 
-    albedo_file_output = nodes.new(type="CompositorNodeOutputFile")
-    albedo_file_output.label = 'Albedo Output'
-    albedo_file_output.base_path = output_dir
-    albedo_file_output.file_slots[0].use_node_format = True
-    # albedo_file_output.format.file_format = "OPEN_EXR"
-    albedo_file_output.format.color_mode = 'RGBA'
-    albedo_file_output.format.color_depth = '8'
-    links.new(alpha_albedo.outputs['Image'], albedo_file_output.inputs[0])
+    # albedo_file_output = nodes.new(type="CompositorNodeOutputFile")
+    # albedo_file_output.label = 'Albedo Output'
+    # albedo_file_output.base_path = output_dir
+    # albedo_file_output.file_slots[0].use_node_format = True
+    # # albedo_file_output.format.file_format = "OPEN_EXR"
+    # albedo_file_output.format.color_mode = 'RGBA'
+    # albedo_file_output.format.color_depth = '8'
+    # links.new(alpha_albedo.outputs['Image'], albedo_file_output.inputs[0])
 
 
     # Set up the rest of your render settings and loop over your rendering process
@@ -1000,7 +1060,7 @@ def render_object(
 
         depth_file_output.file_slots[0].path =  f"{i:03d}_depth"
         normal_file_output.file_slots[0].path = f"{i:03d}_normal"
-        albedo_file_output.file_slots[0].path = f"{i:03d}_albedo"
+        # albedo_file_output.file_slots[0].path = f"{i:03d}_albedo"
 
         bpy.ops.render.render(write_still=True)
 
@@ -1055,8 +1115,8 @@ if __name__ == "__main__":
     render.engine = args.engine
     render.image_settings.file_format = "PNG"
     render.image_settings.color_mode = "RGBA"
-    render.resolution_x = 1024
-    render.resolution_y = 1024
+    render.resolution_x = 1080
+    render.resolution_y = 540
     render.resolution_percentage = 100
 
     # Set cycles settings
@@ -1084,15 +1144,15 @@ if __name__ == "__main__":
 
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(args.output_dir, "debug.blend"))
 
-    output_obj_file = os.path.join(args.output_dir, "output.obj")
+    # output_obj_file = os.path.join(args.output_dir, "output.obj")
 
-    # Select all objects in the scene
-    bpy.ops.object.select_all(action='SELECT')
+    # # Select all objects in the scene
+    # bpy.ops.object.select_all(action='SELECT')
 
-    # Export selected objects as OBJ
-    bpy.ops.export_scene.obj(
-        filepath=output_obj_file,
-        use_selection=True,  # Export only selected objects
-        use_materials=True,  # Export materials
-        use_triangles=True    # Export as triangles
-    )
+    # # Export selected objects as OBJ
+    # bpy.ops.export_scene.obj(
+    #     filepath=output_obj_file,
+    #     use_selection=True,  # Export only selected objects
+    #     use_materials=True,  # Export materials
+    #     use_triangles=True    # Export as triangles
+    # )
